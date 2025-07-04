@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Mindmap Extension",
+  "version": "1.0",
+  "description": "Convert ChatGPT chats into mindmaps",
+  "permissions": [
+    "tabs",
+    "identity",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://*.openai.com/*",
+    "https://chatgpt.com/*"
+  ],
+  "action": {
+    "default_popup": "src/pages/popup.html",
+    "default_icon": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chatgpt.com/chat*",
+        "https://chatgpt.com/c/*",
+        "https://chatgpt.com/share/*"
+      ],
+      "exclude_matches": [
+        "*://chatgpt.com/auth/*",
+        "*://chatgpt.com/pricing*",
+        "*://chatgpt.com/chatgpt-enterprise*"
+      ],
+      "js": ["src/scripts/widget.js"],
+      "css": ["src/styles/widget.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "src/scripts/background.js",
+    "type": "module"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["welcome.html", "src/scripts/welcome.js", "widgeticon.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
