@@ -1,0 +1,157 @@
+PRD: ChatGPT Mindmap Extension
+(Step-by-Step with Behavior Labels & Feature Mapping, Including If-Then Cases)
+Goal
+Enable users to convert ChatGPT conversations into interactive, exportable mindmaps that aid comprehension, recall, and summarization.
+
+
+
+STEP 1: Install the Extension
+1.1 User visits the Chrome Web Store and clicks "Add to Chrome."  → User Behavior
+1.2 Chrome downloads and installs the extension.  → System Behavior
+1.3 Extension icon appears in the browser toolbar with tooltip:  "Click to set up ChatGPT Mindmap Extension."  → System Behavior
+1.4 Extension opens a new Welcome Page in a new browser tab.  → System Behavior
+IF → User visits the Welcome Page:  The page introduces the extension's core value:
+	•	Explains how it turns ChatGPT conversations into mindmaps for learning, planning, and structured thinking.  
+	•	Displays a visual guide showing the ChatGPT site and the widget.  
+	•	Optional help section on pinning the extension.  
+CTA Buttons:
+	•	Open ChatGPT → (opens https://chat.openai.com)  
+	•	Sign in with Google (if not yet authenticated; triggers popup)  → System Behavior  
+Included Features:
+	•	Extension installation  
+	•	Toolbar icon rendering  
+	•	Welcome onboarding page (via chrome.runtime.onInstalled)  
+	•	Instructional UI on widget visibility  
+	•	CTA: open ChatGPT / sign in  
+
+
+
+STEP 2: Authenticate via Gmail (Updated)
+2.1 User clicks the extension icon from the Chrome toolbar.  → User Behavior  OR  User clicks "Sign in with Google" button on the Welcome Page.  → User Behavior
+2.2 Either action opens the popup (popup.html) and checks if a token exists in chrome.storage.local.  → System Behavior
+IF → Token found and valid
+	•	Skip login UI  
+	•	Show: "Signed in as [user@gmail.com]"  
+	•	Show CTA: "Go to ChatGPT to start mapping →"  → System Behavior  
+ELSE IF → Token not found or expired
+	•	Show: "Sign in with Google" button  → System Behavior  
+2.3  IF → User came from Welcome Page
+	•	Trigger Gmail OAuth flow directly  → System Behavior  ELSE  
+	•	User clicks "Sign in with Google" in popup  → User Behavior  
+2.4 OAuth window opens using chrome.identity.launchWebAuthFlow.  → System Behavior
+2.5 User completes login and grants permissions.  → User Behavior
+2.6 Extension stores token in chrome.storage.local, updates popup UI:
+	•	"Signed in as you@example.com"  → System Behavior  
+Included Features:
+	•	Gmail OAuth via chrome.identity  
+	•	Token storage and session validation  
+	•	Auth state-aware popup UI  
+	•	Login state management  
+	•	Immediate OAuth trigger from Welcome Page  
+	•	Post-auth UI update  
+
+
+
+STEP 3: Visit ChatGPT (Updated with Widget + Auth Modal Flow)
+3.1 User opens a new tab or switches to an already open tab at chat.openai.com.  → User Behavior
+3.2 Extension detects tab URL match (chat.openai.com).  → System Behavior
+3.3 Extension injects content script (if not already present) and renders the floating widget in the ChatGPT interface.  → System Behavior
+Widget Behavior (Regardless of Auth State):
+	•	Always visible in bottom-right corner  
+	•	Injected into both new and already open chat.openai.com tabs  
+IF → User is authenticated:
+	•	Widget shows: "Mindmap This Chat"  
+	•	On click: initiates mindmap generation  → System Behavior  
+ELSE → User is not authenticated:
+	•	Widget shows: "Sign in with Google to generate a mindmap"  
+	•	Button: "Sign in & Continue"  
+3.4 User clicks "Sign in & Continue" in widget.  → User Behavior
+3.5 Modal overlay opens with Google Sign-In button.  → System Behavior
+3.6 Upon successful login:
+	•	Modal shows: "Authentication Successful"  
+	•	Buttons: "Make Mindmap of this conversation" and "Close"  
+3.7 System fetches all saved mindmaps associated with user's Gmail.
+	•	If current conversation URL matches a saved mindmap:  
+	◦	Two icons appear in the widget:  
+	▪	"AlreadyMapped" (opens saved mindmap)  
+	▪	"New Mindmap" (triggers option popup)  
+	•	If no mindmap exists for that URL:  
+	◦	Only "Mindmap This Chat" button appears  
+3.8 IF → User clicks "AlreadyMapped":
+	•	System opens the existing mindmap in a new tab (saved URL)  → System Behavior  
+3.9 IF → User clicks "New Mindmap":
+	•	Popup appears with two options:  
+	◦	Option 1: "Create New Mindmap" → starts new generation flow  
+	◦	Option 2: "View Existing Mindmap" → opens existing tab URL  → System Behavior  
+Included Features:
+	•	Content script injected into new + existing tabs  
+	•	Widget shown regardless of auth  
+	•	Auth modal inside ChatGPT tab  
+	•	Post-auth mindmap trigger option  
+	•	Persistent mindmap tracking by ChatGPT URL  
+	•	Saved mindmap detection and redirect  
+	•	Dual icon state for mapped convos  
+	•	Branching options when remapping  
+STEP 4: Generate the Mindmap
+4.1 User clicks "Mindmap This Chat"  → User Behavior
+4.2 Widget shows loading state: "Reading conversation..."  → System Behavior
+4.3 Extension auto-scrolls from top to bottom to load entire conversation:
+	•	Scrolls instantly to top  
+	•	Smooth-scrolls to bottom  
+	•	Waits briefly for lazy-loaded content  → System Behavior  
+4.4 Extension reads and parses full DOM of conversation.  → System Behavior
+4.5 Data is cleaned and structured for GPT.  → System Behavior
+4.6 Structured data sent to GPT API for mindmap generation.  → System Behavior
+4.7 Widget shows: "Generating mindmap..."  → System Behavior
+4.8 On success:
+	•	New tab opened for mindmap viewer  
+	•	Tab URL is saved  → System Behavior  
+4.9 Back in ChatGPT, widget shows: "Mindmap generated! Click here to view it →"  → System Behavior
+4.10 On GPT failure, widget shows: "Mindmap generation failed. Try again."  → System Behavior
+Included Features:
+	•	Auto-scroll capture of ChatGPT DOM  
+	•	DOM parsing and preprocessing  
+	•	GPT mindmap generation  
+	•	Mindmap tab opening and link injection  
+	•	Failure fallback messaging  
+
+
+
+STEP 5: View Mindmap in New Tab
+5.1 Tab loads mindmap.html, reads structured data.  → System Behavior
+5.2 Mindmap rendered with zoom-to-fit animation.  → System Behavior
+Included Features:
+	•	New tab rendering  
+	•	Structured data passing  
+	•	Responsive mindmap canvas  
+
+
+
+STEP 6: Interact with Mindmap
+6.1 User zooms using buttons or scroll  6.2 User pans with click-drag  6.3 User toggles layout (vertical/horizontal)  6.4 User clicks a node to open context panel  6.5 Extension fetches relevant text from original ChatGPT conversation thread matching the node topic  → System Behavior  6.6 User can copy or refresh the snippet  → User Behavior  6.7 User downloads PNG or PDF  → User Behavior  6.8 Download ready toast shown  → System Behavior
+Included Features:
+	•	Zoom/pan  
+	•	Layout toggle  
+	•	Node-level text reference  
+	•	Side panel interaction  
+	•	Export as PNG/PDF  
+	•	Copy/refetch actions  
+
+
+
+STEP 7: Continue Usage / Re-trigger
+7.1 User returns to ChatGPT, continues conversation  7.2 Clicks "Mindmap This Chat" again  7.3 New mindmap generated + opened  7.4 Auth persists across sessions
+Included Features:
+	•	Stateless reprocessing  
+	•	Persistent auth session  
+	•	Repeat generation flow  
+
+
+
+STEP 8: Error Handling
+8.1 Not logged in → Prompt login in popup  8.2 DOM fails → Show "Scroll up" prompt  8.3 GPT fails → Retry message in widget  8.4 Summary fails → Retry option in panel
+Included Features:
+	•	Auth validation  
+	•	DOM checks  
+	•	GPT error fallback  
+	•	Retry mechanisms

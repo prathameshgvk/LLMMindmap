@@ -1,0 +1,366 @@
+TECH STACK
+
+
+Layer
+Tool/Library
+Purpose
+Frontend Framework
+React (with Vite)
+Build both the extension popup & mindmap viewer tab
+UI Components
+Tailwind CSS
+Utility-first CSS for styling
+Chrome Extension APIs
+Manifest V3 + chrome.*
+Extension identity, storage, tab interaction, etc.
+Database
+Supabase PostgreSQL
+Store mindmaps, user IDs, chat URLs
+Data Fetch/Store
+Supabase JS Client SDK
+Communicate between extension and DB
+Mindmap Renderer
+React Flow
+Interactive, node-based mindmap UI
+Conversation Parsing
+DOM + GPT API
+Parse and structure ChatGPT conversation
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+LIST of Chrome. API keys required
+chrome.* API
+Purpose
+Feature It Supports
+chrome.runtime.onInstalled
+Trigger Welcome Page after installation
+STEP 1.4: Welcome tab opens
+chrome.storage.local
+Store auth token, saved mindmaps
+Auth persistence, mindmap mapping
+chrome.identity
+Gmail OAuth
+STEP 2, STEP 3.5 Modal Auth
+chrome.scripting / chrome.tabs.executeScript
+Inject widget/content scripts into ChatGPT
+STEP 3: Widget on chat.openai.com
+chrome.tabs
+Open new tab for mindmap, read current tab info
+STEP 4.8, STEP 5
+chrome.runtime.sendMessage / chrome.runtime.onMessage
+Pass structured data to new tab
+STEP 4.8 → STEP 5.1
+chrome.action
+Control extension icon and popup
+Toolbar icon, popup.html
+
+
+
+
+
+
+
+
+
+High-Level Architecture Flow: ChatGPT Mindmap Extension
+1. Extension Installation & Welcome Flow
+User → Chrome Web Store → Clicks 'Add to Chrome'
+
+
+Triggers Chrome to install the extension (Manifest V3)
+
+
+Chrome → Runs chrome.runtime.onInstalled
+
+
+Opens Welcome Page (webpage hosted via Vite + React frontend)
+
+
+Data Interaction: None
+
+
+Function Type: Read/Trigger
+
+
+2. Authentication (Google OAuth Only)
+User → Clicks Extension Icon or Welcome Page 'Sign in with Google'
+
+
+Opens Extension Popup (React)
+
+
+Extension → Checks for token in chrome.storage.local
+
+
+If absent → Triggers Google OAuth using chrome.identity.launchWebAuthFlow
+
+
+Google OAuth → Returns token → Stored in chrome.storage.local
+
+
+Session identified via decoded Google token → Supabase checks/creates user
+
+
+Data Interaction:
+
+
+users table in Supabase (create or read user by email)
+
+
+Function Type: Create/Read
+
+
+3. ChatGPT Site Detection + Widget Injection
+User → Opens or switches to chat.openai.com tab
+
+
+Extension (background/content script)
+
+
+Matches URL
+
+
+Injects widget into DOM (React component in Shadow DOM)
+
+
+Data Interaction:
+
+
+Check Supabase if mindmap for that URL exists for current user
+
+
+Show "AlreadyMapped" icon if yes
+
+
+Function Type: Read
+
+
+4. Mindmap Triggers (Widget UI)
+Widget → Always visible
+
+
+If not authenticated → Show "Sign in & Continue"
+
+
+If authenticated → Show "Mindmap This Chat"
+
+
+If mindmap already exists for URL → Show 2 buttons:
+
+
+"AlreadyMapped" → Opens existing mindmap in new tab
+
+
+"New Mindmap" → Prompts: create new / view existing
+
+
+Data Interaction: Supabase lookup on mindmap table by user & URL
+
+
+Function Type: Read
+
+
+5. Mindmap Generation Process
+User → Clicks "Mindmap This Chat"
+
+
+Extension → Auto-scrolls ChatGPT conversation (content script)
+
+
+Extension → Reads DOM → Parses full conversation
+
+
+Parses and Structures Data → Sends to OpenAI GPT API
+
+
+Receives structured mindmap → Saves with Supabase DB (keyed by conversation URL + user)
+
+
+Data Points Saved:
+
+
+mindmaps table: user_id, chat_url, mindmap_json, created_at
+
+
+Function Type: Create
+
+
+Opens new tab → Loads mindmap viewer (React)
+
+
+6. Mindmap Viewing & Interaction
+Mindmap Viewer (React-based frontend using library like React Flow)
+
+
+Render nodes, branches, pan, zoom
+
+
+Node-click → Opens panel → Shows relevant conversation snippet
+
+
+Layout toggle (vertical/horizontal)
+
+
+Download as PNG/PDF
+
+
+Data Interaction:
+
+
+Pull data from Supabase using mindmap_id or chat_url
+
+
+Function Type: Read
+
+
+
+Component Breakdown
+A. Extension Shell
+manifest.json (Manifest V3)
+
+
+Chrome permissions, scripts, and entry points
+
+
+B. Popup UI (React)
+Triggered via toolbar icon or Welcome Page
+
+
+Checks login state (via chrome.storage.local)
+
+
+Initiates OAuth if not signed in
+
+
+C. Welcome Page (React + Vite)
+Hosted page shown on first install
+
+
+Explains extension usage
+
+
+Offers Sign-in and "Open ChatGPT" CTA
+
+
+D. Authentication Handler
+Uses chrome.identity.launchWebAuthFlow
+
+
+Receives Google token
+
+
+Stores in chrome.storage.local
+
+
+Decodes token to extract user email for Supabase use
+
+
+E. Content Script / Widget Injection
+Matches chat.openai.com
+
+
+Injects widget (React + Shadow DOM)
+
+
+Handles state based on user auth and mindmap presence
+
+
+F. ChatGPT DOM Reader
+Auto-scrolls to load full conversation
+
+
+Parses message DOM elements into structured format
+
+
+G. GPT Interaction Layer
+Sends structured conversation to OpenAI API
+
+
+Receives structured mindmap nodes/edges
+
+
+H. Mindmap Storage (Supabase)
+Saves generated mindmap as JSON
+
+
+Associates it with user email and conversation URL
+
+
+Enables retrieval on revisits
+
+
+I. Mindmap Viewer (React)
+Displays interactive mindmap (React Flow)
+
+
+Supports pan/zoom, layout toggle, download
+
+
+On node click, shows associated GPT text snippet
+
+
+J. Background Script (Optional)
+Could manage tab state, token expiration, and messaging
+
+
+
+
+Supabase Database Schema: ChatGPT Mindmap Extension
+This document outlines the database tables and schema needed to support the architecture defined in the ChatGPT Mindmap Extension.
+1. users
+Stores user identities based on their Google OAuth login.
+Field
+Type
+Description
+id
+UUID
+Primary key (auto-generated)
+email
+Text
+User's Gmail address (unique)
+created_at
+Timestamp
+Auto-generated signup time
+
+Use: Identify and authorize users for data ownership and retrieval.
+
+2. mindmaps
+Stores each mindmap generated from a ChatGPT conversation.
+Field
+Type
+Description
+id
+UUID
+Primary key
+user_id
+UUID
+Foreign key to users.id
+chat_url
+Text
+URL of the ChatGPT conversation
+title
+Text
+Optional title or inferred summary
+data
+JSONB
+Structured mindmap node/edge data
+created_at
+Timestamp
+Time of mindmap creation
+updated_at
+Timestamp
+Time of last update (for regeneration)
+
+Use: Main storage for each conversation's visual representation.
+Rule: When a user tries to generate a new mindmap for an existing chat_url, the system deletes the previous mindmap tied to that user and replaces it with the newly generated one. This ensures one mindmap per user per ChatGPT conversation.
