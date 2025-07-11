@@ -578,7 +578,7 @@ function showMindmapGenerationPopup(chatTitle = 'Mindmap Generation') {
 
     // Minimize button (icon)
     const topMinimizeBtn = document.createElement('button');
-    topMinimizeBtn.innerHTML = '⌄';
+    topMinimizeBtn.innerHTML = '−';
     topMinimizeBtn.title = 'Minimize to compact view';
     topMinimizeBtn.style.cssText = `
         background: rgba(255, 255, 255, 0.1);
@@ -2821,7 +2821,7 @@ function showFullscreenMindmap(mindmapData, viewMode = 'tree', zoomLevel = 1.0) 
         zoomDisplay.textContent = `${Math.round(fullscreenZoom * 100)}%`;
     };
     
-    const updateFullscreenZoom = (newZoom) => {
+    const updateFullscreenZoom = (newZoom, smooth = true) => {
         fullscreenZoom = Math.max(0.1, Math.min(5.0, newZoom));
         updateZoomDisplay();
         
@@ -2829,13 +2829,13 @@ function showFullscreenMindmap(mindmapData, viewMode = 'tree', zoomLevel = 1.0) 
         const zoomContainer = content.querySelector('.mindmap-zoom-container');
         if (zoomContainer) {
             zoomContainer.style.transform = `scale(${fullscreenZoom})`;
-            zoomContainer.style.transition = 'transform 0.2s ease';
+            zoomContainer.style.transition = smooth ? 'transform 0.15s ease-out' : 'none';
             console.log(`🔍 Fullscreen zoom updated to ${Math.round(fullscreenZoom * 100)}% - edges scale with content`);
         }
     };
     
-    const zoomOutBtn = createZoomButton('−', () => updateFullscreenZoom(fullscreenZoom - 0.25), 'Zoom Out');
-    const zoomInBtn = createZoomButton('+', () => updateFullscreenZoom(fullscreenZoom + 0.25), 'Zoom In');
+    const zoomOutBtn = createZoomButton('−', () => updateFullscreenZoom(fullscreenZoom - 0.1), 'Zoom Out');
+    const zoomInBtn = createZoomButton('+', () => updateFullscreenZoom(fullscreenZoom + 0.1), 'Zoom In');
     const resetZoomBtn = createZoomButton('⌂', () => updateFullscreenZoom(1.0), 'Reset Zoom');
     
     updateZoomDisplay();
@@ -2938,10 +2938,10 @@ function showFullscreenMindmap(mindmapData, viewMode = 'tree', zoomLevel = 1.0) 
             document.removeEventListener('keydown', handleKeydown);
         } else if ((e.ctrlKey || e.metaKey) && e.key === '+') {
             e.preventDefault();
-            updateFullscreenZoom(fullscreenZoom + 0.25);
+            updateFullscreenZoom(fullscreenZoom + 0.1);
         } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
             e.preventDefault();
-            updateFullscreenZoom(fullscreenZoom - 0.25);
+            updateFullscreenZoom(fullscreenZoom - 0.1);
         } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
             e.preventDefault();
             updateFullscreenZoom(1.0);
@@ -2950,12 +2950,35 @@ function showFullscreenMindmap(mindmapData, viewMode = 'tree', zoomLevel = 1.0) 
     
     document.addEventListener('keydown', handleKeydown);
     
-    // Handle mouse wheel zoom
+    // Handle smooth mouse wheel zoom with variable sensitivity
+    let zoomTimeoutId = null;
     content.addEventListener('wheel', (e) => {
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            updateFullscreenZoom(fullscreenZoom + delta);
+            
+            // Calculate granular zoom delta based on wheel velocity
+            const baseZoomStep = 0.02; // Much smaller base step for granular control
+            const velocityMultiplier = Math.min(Math.abs(e.deltaY) / 100, 3); // Scale with scroll speed, max 3x
+            const zoomStep = baseZoomStep * velocityMultiplier;
+            
+            const delta = e.deltaY > 0 ? -zoomStep : zoomStep;
+            
+            // Apply zoom without smooth transition for immediate response
+            updateFullscreenZoom(fullscreenZoom + delta, false);
+            
+            // Clear any pending timeout and set a new one for smooth transition back
+            if (zoomTimeoutId) {
+                clearTimeout(zoomTimeoutId);
+            }
+            
+            zoomTimeoutId = setTimeout(() => {
+                // Re-apply current zoom with smooth transition for polish
+                const zoomContainer = content.querySelector('.mindmap-zoom-container');
+                if (zoomContainer) {
+                    zoomContainer.style.transition = 'transform 0.2s ease-out';
+                }
+                zoomTimeoutId = null;
+            }, 50);
         }
     });
     
@@ -3011,9 +3034,181 @@ function validateMindmapStructure(node) {
 }
 
 // Function to convert Supabase hierarchical format to ReactFlow format
+/**
+ * MINDMAP NODE COLOR CODING SYSTEM
+ * 
+ * Hierarchical color logic for visual organization:
+ * 1. Root node: Unique deep purple color (always stands out)
+ * 2. Level 1 nodes (direct children of root): All share the same blue color
+ * 3. Level 2+ nodes: Children with the same parent share the same color
+ * 4. Different parent groups get different colors to distinguish sibling branches
+ * 5. Colors cycle through palette to avoid repetition unless following above rules
+ * 
+ * Visual Benefits:
+ * - Instant visual hierarchy recognition
+ * - Easy to trace parent-child relationships
+ * - Distinct color groups for different conversation branches
+ * - Glassy, modern aesthetic with transparency and blur effects
+ */
+
+// Color palette for mindmap nodes with glassy effects
+function createGlassyColorPalette() {
+    return {
+        // Root node - unique color
+        root: {
+            background: 'rgba(147, 51, 234, 0.15)', // Deep purple
+            border: '1px solid rgba(147, 51, 234, 0.3)',
+            shadow: '0 4px 12px rgba(147, 51, 234, 0.2)',
+            textColor: '#4c1d95'
+        },
+        // Color sets for different levels and groups
+        levelColors: [
+            // Level 1 (direct children of root) - all same color
+            {
+                background: 'rgba(59, 130, 246, 0.15)', // Blue
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                shadow: '0 4px 12px rgba(59, 130, 246, 0.2)',
+                textColor: '#1e3a8a'
+            },
+            // Level 2+ colors - rotate through these for different parent groups
+            {
+                background: 'rgba(16, 185, 129, 0.15)', // Emerald
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                shadow: '0 4px 12px rgba(16, 185, 129, 0.2)',
+                textColor: '#064e3b'
+            },
+            {
+                background: 'rgba(245, 158, 11, 0.15)', // Amber
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                shadow: '0 4px 12px rgba(245, 158, 11, 0.2)',
+                textColor: '#92400e'
+            },
+            {
+                background: 'rgba(239, 68, 68, 0.15)', // Red
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                shadow: '0 4px 12px rgba(239, 68, 68, 0.2)',
+                textColor: '#991b1b'
+            },
+            {
+                background: 'rgba(168, 85, 247, 0.15)', // Purple
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                shadow: '0 4px 12px rgba(168, 85, 247, 0.2)',
+                textColor: '#581c87'
+            },
+            {
+                background: 'rgba(236, 72, 153, 0.15)', // Pink
+                border: '1px solid rgba(236, 72, 153, 0.3)',
+                shadow: '0 4px 12px rgba(236, 72, 153, 0.2)',
+                textColor: '#9d174d'
+            },
+            {
+                background: 'rgba(6, 182, 212, 0.15)', // Cyan
+                border: '1px solid rgba(6, 182, 212, 0.3)',
+                shadow: '0 4px 12px rgba(6, 182, 212, 0.2)',
+                textColor: '#164e63'
+            },
+            {
+                background: 'rgba(34, 197, 94, 0.15)', // Green
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                shadow: '0 4px 12px rgba(34, 197, 94, 0.2)',
+                textColor: '#14532d'
+            },
+            {
+                background: 'rgba(251, 146, 60, 0.15)', // Orange
+                border: '1px solid rgba(251, 146, 60, 0.3)',
+                shadow: '0 4px 12px rgba(251, 146, 60, 0.2)',
+                textColor: '#9a3412'
+            },
+            {
+                background: 'rgba(99, 102, 241, 0.15)', // Indigo
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                shadow: '0 4px 12px rgba(99, 102, 241, 0.2)',
+                textColor: '#312e81'
+            }
+        ]
+    };
+}
+
+// Function to assign colors to nodes based on hierarchical logic
+function assignNodeColors(hierarchicalNode) {
+    const colorPalette = createGlassyColorPalette();
+    const nodeColorMap = new Map();
+    const parentColorIndex = new Map(); // Track color index for each parent
+    
+    // Recursive function to assign colors
+    function assignColor(node, parentId = null, level = 0, parentColorIdx = 0) {
+        if (level === 0) {
+            // Root node gets unique color
+            nodeColorMap.set(node.id, {
+                ...colorPalette.root,
+                level: 0,
+                parentId: null
+            });
+        } else if (level === 1) {
+            // All direct children of root get the same color (level 1 color)
+            nodeColorMap.set(node.id, {
+                ...colorPalette.levelColors[0], // First color in array for level 1
+                level: 1,
+                parentId: parentId
+            });
+        } else {
+            // For level 2+, children with same parent get same color
+            // Different parent groups get different colors
+            let colorIndex;
+            
+            if (parentColorIndex.has(parentId)) {
+                // Parent already has a color assigned, use the same for all children
+                colorIndex = parentColorIndex.get(parentId);
+            } else {
+                // Assign next available color to this parent group
+                // Use modulo to cycle through available colors
+                const usedIndices = new Set(parentColorIndex.values());
+                colorIndex = 1; // Start from index 1 (index 0 is for level 1)
+                
+                // Find next unused color index
+                while (usedIndices.has(colorIndex)) {
+                    colorIndex = (colorIndex + 1) % colorPalette.levelColors.length;
+                    if (colorIndex === 0) colorIndex = 1; // Skip index 0 (reserved for level 1)
+                }
+                
+                parentColorIndex.set(parentId, colorIndex);
+            }
+            
+            nodeColorMap.set(node.id, {
+                ...colorPalette.levelColors[colorIndex],
+                level: level,
+                parentId: parentId
+            });
+        }
+        
+        // Process children
+        if (node.children && node.children.length > 0) {
+            node.children.forEach(child => {
+                assignColor(child, node.id, level + 1, parentColorIndex.get(node.id));
+            });
+        }
+    }
+    
+    // Start color assignment from root
+    assignColor(hierarchicalNode);
+    
+    // Debug: Log color assignments
+    console.log('🎨 Node color assignments:', Array.from(nodeColorMap.entries()).map(([id, color]) => ({
+        nodeId: id,
+        level: color.level,
+        parentId: color.parentId,
+        background: color.background
+    })));
+    
+    return nodeColorMap;
+}
+
 function convertToReactFlowFormat(hierarchicalNode) {
     const nodes = [];
     const edges = [];
+    
+    // Assign colors to all nodes first
+    const nodeColors = assignNodeColors(hierarchicalNode);
 
     // Helper to count all descendants for width calculation
     function countDescendants(node) {
@@ -3034,22 +3229,32 @@ function convertToReactFlowFormat(hierarchicalNode) {
         let x = xOffset + (subtreeWidth * nodeSpacing) / 2 - nodeSpacing / 2;
         let y = baseY + (level * levelSpacing);
 
+        // Get assigned color for this node
+        const nodeColor = nodeColors.get(node.id);
+        
         // Create ReactFlow node (data comes from Supabase Edge Function with validated structure)
         const reactFlowNode = {
             id: node.id,
             data: {
                 label: node.text,           // 2-4 words as validated by Edge Function
                 detail: node.detail,        // 1-2 sentences as validated by Edge Function
-                messageIds: node.messageIds || []
+                messageIds: node.messageIds || [],
+                color: nodeColor            // Add color info to node data
             },
             position: { x, y },
             type: 'default',
             style: {
-                background: level === 0 ? '#e3f2fd' : '#f5f5f5',
-                border: '1px solid #ccc',
-                borderRadius: '8px',
-                padding: '10px',
-                minWidth: '120px'
+                background: nodeColor ? nodeColor.background : '#f5f5f5',
+                border: nodeColor ? nodeColor.border : '1px solid #ccc',
+                borderRadius: '12px',
+                padding: '12px',
+                minWidth: '120px',
+                boxShadow: nodeColor ? nodeColor.shadow : '0 2px 4px rgba(0, 0, 0, 0.1)',
+                backdropFilter: 'blur(10px)',
+                // Add glassy effect styling
+                borderTop: '1px solid rgba(255, 255, 255, 0.2)',
+                borderLeft: '1px solid rgba(255, 255, 255, 0.1)',
+                color: nodeColor ? nodeColor.textColor : '#374151'
             }
         };
         nodes.push(reactFlowNode);
@@ -4108,7 +4313,7 @@ function createSidebar(mindmapData) {
     `;
     
     // Function to update zoom
-    function updateZoom(newZoom) {
+    function updateZoom(newZoom, smooth = true) {
         currentZoom = Math.max(0.25, Math.min(3.0, newZoom)); // Limit zoom between 25% and 300%
         zoomDisplay.textContent = `${Math.round(currentZoom * 100)}%`;
         // Note: Not saving zoom to localStorage - each new mindmap starts fresh at 100%
@@ -4117,7 +4322,7 @@ function createSidebar(mindmapData) {
         const zoomContainer = mindmapContainer.querySelector('.mindmap-zoom-container');
         if (zoomContainer) {
             zoomContainer.style.transform = `scale(${currentZoom})`;
-            zoomContainer.style.transition = 'transform 0.2s ease';
+            zoomContainer.style.transition = smooth ? 'transform 0.15s ease-out' : 'none';
             console.log(`🔍 Updated zoom to ${Math.round(currentZoom * 100)}% - edges should scale properly with nodes`);
         }
     }
@@ -4162,19 +4367,42 @@ function createSidebar(mindmapData) {
     listViewBtn.onclick = () => updateViewMode('list');
     
     // Zoom control event handlers
-    zoomInBtn.onclick = () => updateZoom(currentZoom + 0.25);
-    zoomOutBtn.onclick = () => updateZoom(currentZoom - 0.25);
+    zoomInBtn.onclick = () => updateZoom(currentZoom + 0.1);
+    zoomOutBtn.onclick = () => updateZoom(currentZoom - 0.1);
     resetZoomBtn.onclick = () => updateZoom(1.0);
     
     // Expand button event handler
     expandBtn.onclick = () => showFullscreenMindmap(mindmapData, currentViewMode, currentZoom);
     
-    // Keyboard shortcuts for zoom
+    // Handle smooth mouse wheel zoom with variable sensitivity for sidebar
+    let sidebarZoomTimeoutId = null;
     mindmapContainer.addEventListener('wheel', (e) => {
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            updateZoom(currentZoom + delta);
+            
+            // Calculate granular zoom delta based on wheel velocity
+            const baseZoomStep = 0.02; // Much smaller base step for granular control
+            const velocityMultiplier = Math.min(Math.abs(e.deltaY) / 100, 3); // Scale with scroll speed, max 3x
+            const zoomStep = baseZoomStep * velocityMultiplier;
+            
+            const delta = e.deltaY > 0 ? -zoomStep : zoomStep;
+            
+            // Apply zoom without smooth transition for immediate response
+            updateZoom(currentZoom + delta, false);
+            
+            // Clear any pending timeout and set a new one for smooth transition back
+            if (sidebarZoomTimeoutId) {
+                clearTimeout(sidebarZoomTimeoutId);
+            }
+            
+            sidebarZoomTimeoutId = setTimeout(() => {
+                // Re-apply current zoom with smooth transition for polish
+                const zoomContainer = mindmapContainer.querySelector('.mindmap-zoom-container');
+                if (zoomContainer) {
+                    zoomContainer.style.transition = 'transform 0.2s ease-out';
+                }
+                sidebarZoomTimeoutId = null;
+            }, 50);
         }
     });
     
@@ -4637,6 +4865,9 @@ function createMindmapNode(node, viewMode = 'tree') {
     const x = node.position.x;
     const y = node.position.y;
     
+    // Get color information from node data
+    const nodeColor = node.data?.color;
+    
     nodeElement.style.cssText = `
         position: absolute;
         left: ${x}px;
@@ -4644,21 +4875,32 @@ function createMindmapNode(node, viewMode = 'tree') {
         min-width: 120px;
         max-width: 200px;
         padding: 12px;
-        background: ${node.style?.background || '#ffffff'};
-        border: ${node.style?.border || '1px solid #d1d5db'};
-        border-radius: ${node.style?.borderRadius || '8px'};
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        background: ${nodeColor?.background || node.style?.background || 'rgba(255, 255, 255, 0.15)'};
+        border: ${nodeColor?.border || node.style?.border || '1px solid rgba(255, 255, 255, 0.2)'};
+        border-radius: ${node.style?.borderRadius || '12px'};
+        box-shadow: ${nodeColor?.shadow || '0 4px 8px rgba(0, 0, 0, 0.1)'};
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(255, 255, 255, 0.3);
+        border-left: 1px solid rgba(255, 255, 255, 0.2);
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.3s ease;
         font-size: 13px;
         line-height: 1.4;
+        color: ${nodeColor?.textColor || '#374151'};
     `;
     
-    // Add hover effect with tooltip
+    // Add enhanced hover effect with glassy styling
     let hoverTimeout;
+    const originalShadow = nodeColor?.shadow || '0 4px 8px rgba(0, 0, 0, 0.1)';
+    const enhancedShadow = nodeColor ? 
+        nodeColor.shadow.replace('0.2)', '0.4)').replace('12px', '16px') : 
+        '0 6px 12px rgba(0, 0, 0, 0.2)';
+    
     nodeElement.addEventListener('mouseenter', (e) => {
-        nodeElement.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
-        nodeElement.style.transform = 'translateY(-1px)';
+        nodeElement.style.boxShadow = enhancedShadow;
+        nodeElement.style.transform = 'translateY(-2px) scale(1.02)';
+        nodeElement.style.borderTop = '1px solid rgba(255, 255, 255, 0.5)';
+        nodeElement.style.borderLeft = '1px solid rgba(255, 255, 255, 0.4)';
         
         // Show hover tooltip after brief delay
         hoverTimeout = setTimeout(() => {
@@ -4667,8 +4909,10 @@ function createMindmapNode(node, viewMode = 'tree') {
     });
     
     nodeElement.addEventListener('mouseleave', () => {
-        nodeElement.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-        nodeElement.style.transform = 'translateY(0)';
+        nodeElement.style.boxShadow = originalShadow;
+        nodeElement.style.transform = 'translateY(0) scale(1)';
+        nodeElement.style.borderTop = '1px solid rgba(255, 255, 255, 0.3)';
+        nodeElement.style.borderLeft = '1px solid rgba(255, 255, 255, 0.2)';
         
         // Clear hover timeout and hide hover tooltip
         clearTimeout(hoverTimeout);
@@ -4680,11 +4924,12 @@ function createMindmapNode(node, viewMode = 'tree') {
     nodeTitle.textContent = node.data.label;
     nodeTitle.style.cssText = `
         font-weight: 600;
-        color: #111827;
+        color: ${nodeColor?.textColor || '#111827'};
         margin-bottom: 0;
         font-size: 14px;
         text-align: center;
         white-space: pre-line;
+        text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
     `;
     
     nodeElement.appendChild(nodeTitle);
